@@ -1,7 +1,16 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/crownbackend/golang-api-blog/models"
+)
 
 func main() {
-	fmt.Printf("Hello world")
+	user := models.User{
+		Id:       1,
+		Email:    "john@doe.fr",
+		Password: "1234",
+	}
+	fmt.Printf("User: %+v \n", user)
 }
