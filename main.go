@@ -36,6 +36,7 @@ func main() {
 	r.GET("/", home)
 	r.GET("/users", handlers.GetUsers)
 	r.POST("/users", handlers.CreateUser)
+	r.POST("/login", handlers.Login)
 
 	// run server
 	r.Run("localhost:8000")

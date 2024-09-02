@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/base64"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -44,6 +46,60 @@ func GetUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"users": users})
 }
 
+func Login(c *gin.Context) {
+	var userLogin models.Login
+	if err := c.ShouldBindJSON(&userLogin); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var storedEmail, storedHash string
+	query := "SELECT email, password FROM user WHERE email = ?"
+
+	err := db.QueryRow(query, userLogin.Email).Scan(&storedEmail, &storedHash)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Email ou mot de passe incorrect"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erreur serveur"})
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(userLogin.Password))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Email ou mot de passe incorrect "})
+		return
+	}
+
+	queryToken, err := db.Prepare("UPDATE user SET token=? WHERE email = ?")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erreur serveur"})
+		return
+	}
+
+	var token string = generateToken(userLogin.Email)
+	res, err := queryToken.Exec(token, userLogin.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erreur serveur"})
+		return
+	}
+
+	r, err := res.RowsAffected()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erreur serveur"})
+		return
+	}
+
+	fmt.Println(r)
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"email": userLogin.Email,
+	})
+
+}
+
 func CreateUser(c *gin.Context) {
 	var user models.User
 	if err := c.ShouldBindJSON(&user); err != nil {
@@ -75,11 +131,16 @@ func CreateUser(c *gin.Context) {
 	user.Password = string(hashedPassword)
 
 	// Préparer la requête d'insertion
-	query := `INSERT INTO user (email, password, first_name, last_name, created_at) VALUES (?, ?, ?, ?, ?)`
-	result, err := db.Exec(query, user.Email, user.Password, user.FirstName, user.LastName, time.Now().Format(time.RFC3339))
+	query, err := db.Prepare("INSERT INTO user (email, password, first_name, last_name, created_at) VALUES (?, ?, ?, ?, ?)")
+	if err != nil {
+		log.Println("Erreur prepar :", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erreur serveur"})
+		return
+	}
+	result, err := query.Exec(user.Email, user.Password, user.FirstName, user.LastName, time.Now().Format(time.RFC3339))
 	if err != nil {
 		log.Println("Erreur lors de l'insertion :", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erreur lors de l'insertion"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erreur serveur"})
 		return
 	}
 
@@ -105,4 +166,13 @@ func emailExists(email string) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func generateToken(email string) string {
+	hash, err := bcrypt.GenerateFromPassword([]byte(email), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return base64.StdEncoding.EncodeToString(hash)
 }
