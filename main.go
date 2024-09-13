@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/crownbackend/golang-api-blog/handlers"
+	"github.com/crownbackend/golang-api-blog/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
@@ -34,9 +35,15 @@ func main() {
 
 	// list of routes
 	r.GET("/", home)
-	r.GET("/users", handlers.GetUsers)
 	r.POST("/users", handlers.CreateUser)
 	r.POST("/login", handlers.Login)
+	r.GET("/posts", handlers.GetPosts)
+
+	protected := r.Group("/users")
+	protected.Use(middleware.AuthMiddleware(db))
+	{
+		protected.GET("", handlers.GetUsers)
+	}
 
 	// run server
 	r.Run("localhost:8000")
