@@ -45,6 +45,11 @@ func main() {
 		protected.GET("", handlers.GetUsers)
 	}
 
+	pProtected := r.Group("/posts/")
+	pProtected.Use(middleware.AuthMiddleware(db))
+	{
+	//	pProtected.GET("add", handlers.GetPosts)
+	}
 	// run server
 	r.Run("localhost:8000")
 }
